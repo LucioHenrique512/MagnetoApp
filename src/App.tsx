@@ -1,4 +1,4 @@
-import React, {useRef} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   Button,
   Dimensions,
@@ -8,14 +8,24 @@ import {
   Text,
   View,
   Animated,
+  Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/AntDesign';
+import {ConnectModal} from './connectModal';
+//import {connectBle} from './utils/bleUtils';
+import RNBluetoothClassic, {
+  BluetoothDevice,
+} from 'react-native-bluetooth-classic';
 
 const AnimatedIcon = Animated.createAnimatedComponent(Icon);
 
 const {width: ScreenWidth} = Dimensions.get('screen');
 
 const App: React.FC = () => {
+  const [device, setDevice] = useState<BluetoothDevice>();
+  const [deviceList, setDeviceList] = useState<BluetoothDevice[]>();
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
+
   const animatedValue = useRef(new Animated.Value(0)).current;
 
   const spin = animatedValue.interpolate({
@@ -23,18 +33,51 @@ const App: React.FC = () => {
     outputRange: ['0deg', '360deg'],
   });
 
-  const spinArrow = (deg: number) => {
-    Animated.timing(animatedValue, {
-      toValue: deg,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
+  // const spinArrow = (deg: number) => {
+  //   Animated.timing(animatedValue, {
+  //     toValue: deg,
+  //     duration: 500,
+  //     useNativeDriver: true,
+  //   }).start();
+  // };
+
+  const onConnectPress = async (bleDevice: BluetoothDevice) => {
+    try {
+      setModalVisible(false);
+      setDevice(bleDevice);
+    } catch (error) {
+      console.log(error);
+    }
   };
 
-  const onButtonPress = () => {
-    const random = Math.floor(Math.random() * 360);
-    spinArrow(random);
+  const onButtonPress = async () => {
+    //connectBle();
+    try {
+      const devices = await RNBluetoothClassic.getBondedDevices();
+      setDeviceList(devices);
+      setModalVisible(true);
+    } catch (error) {
+      console.log('Não consegui buscar os devices');
+    }
   };
+
+  const onClosePress = () => setModalVisible(false);
+
+  useEffect(() => {
+    if (!device) {
+      return;
+    }
+
+    try {
+      RNBluetoothClassic.isBluetoothAvailable();
+      RNBluetoothClassic.connectToDevice(device.address);
+      RNBluetoothClassic.onDeviceRead(device.address, event =>
+        console.log(event),
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  }, [device]);
 
   return (
     <React.Fragment>
@@ -42,7 +85,7 @@ const App: React.FC = () => {
       <SafeAreaView style={styles.container}>
         <View style={styles.titleContainer}>
           <Text style={styles.appTitle}>MagnetoApp</Text>
-          <Text style={styles.appSubtitle}>Dispositivo não conectado!</Text>
+          <Text style={styles.appSubtitle}>Connected: {device?.name}</Text>
         </View>
         <View style={styles.arrowContainer}>
           <AnimatedIcon
@@ -53,9 +96,20 @@ const App: React.FC = () => {
           />
         </View>
         <View style={styles.buttomContainer}>
-          <Button onPress={onButtonPress} title="Connectar" />
+          <Button onPress={onButtonPress} title="Add device" />
         </View>
       </SafeAreaView>
+      <Modal
+        visible={modalVisible}
+        animationType="fade"
+        onDismiss={onClosePress}
+        transparent>
+        <ConnectModal
+          onConnectPress={onConnectPress}
+          onClosePress={onClosePress}
+          deviceList={deviceList}
+        />
+      </Modal>
     </React.Fragment>
   );
 };
